@@ -9,8 +9,10 @@ import {
 import { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { getPrompts } from "../prompts/index.js";
 
-const CONDENSE_POST_PROMPT = `You're a highly skilled marketer at LangChain, working on crafting thoughtful and engaging content for LangChain's LinkedIn and Twitter pages.
-You wrote a post for the LangChain LinkedIn and Twitter pages, however it's a bit too long for Twitter, and thus needs to be condensed.
+const CONDENSE_POST_PROMPT = `You're a highly skilled content marketer, working on crafting thoughtful and engaging content for LinkedIn and Twitter pages.
+You wrote a post for LinkedIn and Twitter, however it's a bit too long for Twitter, and thus needs to be condensed.
+
+IMPORTANT: The user message contains the ORIGINAL POST that you wrote. You must CONDENSE it, not ask questions about it.
 
 You wrote this marketing report on the content which you used to write the original post:
 <report>
@@ -38,8 +40,16 @@ ${getPrompts().postContentRules}
 
 </rules-and-structure>
 
-Given the marketing report, link, rules and structure, please condense the post down to roughly 280 characters (not including the link). The original post was {originalPostLength} characters long.
+Given the marketing report, link, rules and structure, please condense the post down to 400-550 characters of substantive content (not including the link). The original post was {originalPostLength} characters long.
+IMPORTANT: Maintain the DEEP ANALYSIS, MULTIPLE KEY INSIGHTS, and EDUCATIONAL VALUE from the original post. Do NOT reduce it to a simple summary - keep the analytical depth, context, and insights. Only condense by removing redundancy and tightening language, not by removing valuable information.
 Ensure you keep the same structure, and do not omit any crucial content outright.
+
+CRITICAL INSTRUCTIONS:
+- You MUST condense the post provided in the user message below
+- DO NOT ask questions or request the original post
+- DO NOT engage in conversation
+- ALWAYS output a condensed post inside <post> tags
+- The user message contains the complete original post - use it!
 
 Follow this flow to rewrite the post in a condensed format:
 
@@ -49,7 +59,7 @@ Follow this flow to rewrite the post in a condensed format:
 3. Using all the context provided to you above, the original post, and your thoughts, rewrite the post in a condensed format inside <post> tags. This should be the last text you write.
 </rewriting-flow>
 
-Follow all rules and instructions outlined above. The user message below will provide the original post. Remember to have fun while rewriting it! Go!`;
+Follow all rules and instructions outlined above. The user message below provides the original post. You MUST condense it and output the result inside <post> tags!`;
 
 /**
  * Attempts to condense a post if the original generation is longer than 300 characters.

@@ -5,6 +5,10 @@ import { HumanInterrupt, HumanResponse } from "@langchain/langgraph/prebuilt";
 import Arcade from "@arcadeai/arcadejs";
 import { TwitterClient } from "../../../clients/twitter/client.js";
 import { useArcadeAuth } from "../../utils.js";
+import { appendFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+const DEBUG_LOG = join("c:", "Users", "HPProdesk", "Desktop", "NewSaaS", ".cursor", "debug.log");
+const debugLog = (data: any) => { try { mkdirSync(dirname(DEBUG_LOG), {recursive:true}); appendFileSync(DEBUG_LOG, JSON.stringify({...data,timestamp:Date.now()})+"\n"); console.log("[DEBUG]", data.message, data.data); } catch(e){console.error("[DEBUG ERROR]", e);} };
 
 /**
  * Checks Twitter authorization status and triggers an interrupt if authorization is needed.
@@ -28,11 +32,28 @@ export async function getArcadeTwitterAuthOrInterrupt(
     returnInterrupt?: boolean;
   },
 ) {
-  const authResponse = await TwitterClient.authorizeUser(twitterUserId, arcade);
+  // #region agent log
+  debugLog({location:'twitter.ts:28',message:'getArcadeTwitterAuthOrInterrupt entry',data:{twitterUserId,returnInterrupt:options?.returnInterrupt},sessionId:'debug-session',runId:'run1',hypothesisId:'B,E,F'});
+  // #endregion
+  let authResponse;
+  try {
+    authResponse = await TwitterClient.authorizeUser(twitterUserId, arcade);
+    // #region agent log
+    debugLog({location:'twitter.ts:40',message:'TwitterClient.authorizeUser result',data:{hasAuthResponse:!!authResponse,hasAuthUrl:!!authResponse?.authorizationUrl,authUrl:authResponse?.authorizationUrl},sessionId:'debug-session',runId:'run1',hypothesisId:'E,F'});
+    // #endregion
+  } catch (error: any) {
+    // #region agent log
+    debugLog({location:'twitter.ts:44',message:'ERROR in TwitterClient.authorizeUser',data:{error:error?.message,errorStack:error?.stack},sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+    // #endregion
+    throw error;
+  }
 
   const authUrl = authResponse.authorizationUrl;
 
   if (authUrl) {
+    // #region agent log
+    debugLog({location:'twitter.ts:53',message:'Creating Twitter interrupt',data:{authUrl},sessionId:'debug-session',runId:'run1',hypothesisId:'F'});
+    // #endregion
     const description = `# Authorization Required
   
 Please visit the following URL to authorize reading & posting Tweets.
@@ -60,6 +81,9 @@ If you have already authorized reading/posting on Twitter, please accept this in
     };
 
     if (options?.returnInterrupt) {
+      // #region agent log
+      debugLog({location:'twitter.ts:83',message:'Returning Twitter interrupt',data:{interruptAction:authInterrupt.action_request.action,interruptArgs:authInterrupt.action_request.args},sessionId:'debug-session',runId:'run1',hypothesisId:'B,C'});
+      // #endregion
       return authInterrupt;
     }
 
@@ -77,7 +101,9 @@ If you have already authorized reading/posting on Twitter, please accept this in
       throw new Error("Authorization denied by user.");
     }
   }
-
+  // #region agent log
+  debugLog({location:'twitter.ts:105',message:'No authUrl, returning undefined',data:{hasAuthResponse:!!authResponse},sessionId:'debug-session',runId:'run1',hypothesisId:'F'});
+  // #endregion
   return undefined;
 }
 
@@ -136,21 +162,38 @@ export async function getTwitterAuthOrInterrupt(fields?: {
   twitterUserId?: string;
   returnInterrupt?: boolean;
 }) {
+  // #region agent log
+  debugLog({location:'twitter.ts:159',message:'getTwitterAuthOrInterrupt entry',data:{hasTwitterUserId:!!fields?.twitterUserId,useArcade:useArcadeAuth(),hasArcadeKey:!!process.env.ARCADE_API_KEY},sessionId:'debug-session',runId:'run1',hypothesisId:'B,E'});
+  // #endregion
   if (useArcadeAuth()) {
     if (!fields?.twitterUserId) {
       throw new Error("Must provide Twitter User ID when using Arcade auth.");
     }
 
-    return getArcadeTwitterAuthOrInterrupt(
+    // #region agent log
+    debugLog({location:'twitter.ts:174',message:'Calling Arcade Twitter auth',data:{twitterUserId:fields.twitterUserId},sessionId:'debug-session',runId:'run1',hypothesisId:'B,E,F'});
+    // #endregion
+    const result = await getArcadeTwitterAuthOrInterrupt(
       fields.twitterUserId,
       new Arcade({ apiKey: process.env.ARCADE_API_KEY }),
       {
         returnInterrupt: fields?.returnInterrupt,
       },
     );
+    // #region agent log
+    debugLog({location:'twitter.ts:181',message:'Arcade Twitter auth result',data:{hasResult:!!result,resultArgs:result?.action_request?.args,resultAction:result?.action_request?.action},sessionId:'debug-session',runId:'run1',hypothesisId:'B,F'});
+    // #endregion
+    return result;
   }
 
-  return getBasicTwitterAuthOrInterrupt({
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/8f0f911b-6156-4958-a56a-aee3253e18f1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'twitter.ts:155',message:'Calling basic Twitter auth',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B,E'})}).catch(()=>{});
+  // #endregion
+  const result = await getBasicTwitterAuthOrInterrupt({
     returnInterrupt: fields?.returnInterrupt,
   });
+  // #region agent log
+  debugLog({location:'twitter.ts:194',message:'Basic Twitter auth result',data:{hasResult:!!result,resultArgs:result?.action_request?.args},sessionId:'debug-session',runId:'run1',hypothesisId:'B'});
+  // #endregion
+  return result;
 }

@@ -7,6 +7,10 @@ import {
 import { HumanInterrupt, HumanResponse } from "@langchain/langgraph/prebuilt";
 import Arcade from "@arcadeai/arcadejs";
 import { useArcadeAuth } from "../../utils.js";
+import { appendFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+const DEBUG_LOG = join("c:", "Users", "HPProdesk", "Desktop", "NewSaaS", ".cursor", "debug.log");
+const debugLog = (data: any) => { try { mkdirSync(dirname(DEBUG_LOG), {recursive:true}); appendFileSync(DEBUG_LOG, JSON.stringify({...data,timestamp:Date.now()})+"\n"); console.log("[DEBUG]", data.message, data.data); } catch(e){console.error("[DEBUG ERROR]", e);} };
 
 const LINKEDIN_AUTHORIZATION_DOCS_URL =
   "https://github.com/langchain-ai/social-media-agent?tab=readme-ov-file#setup";
@@ -98,15 +102,32 @@ async function getArcadeLinkedInAuthOrInterrupt(
     postToOrg?: boolean;
   },
 ) {
+  // #region agent log
+  debugLog({location:'linkedin.ts:101',message:'getArcadeLinkedInAuthOrInterrupt entry',data:{linkedInUserId,postToOrg:fields?.postToOrg,returnInterrupt:fields?.returnInterrupt},sessionId:'debug-session',runId:'run1',hypothesisId:'B,E,F'});
+  // #endregion
   const scopes = fields?.postToOrg
     ? ["w_member_social", "w_organization_social"]
     : ["w_member_social"];
-  const authResponse = await arcade.auth.start(linkedInUserId, "linkedin", {
-    scopes,
-  });
+  let authResponse;
+  try {
+    authResponse = await arcade.auth.start(linkedInUserId, "linkedin", {
+      scopes,
+    });
+    // #region agent log
+    debugLog({location:'linkedin.ts:113',message:'arcade.auth.start result',data:{hasAuthResponse:!!authResponse,hasAuthUrl:!!authResponse?.url,authUrl:authResponse?.url},sessionId:'debug-session',runId:'run1',hypothesisId:'E,F'});
+    // #endregion
+  } catch (error: any) {
+    // #region agent log
+    debugLog({location:'linkedin.ts:119',message:'ERROR in arcade.auth.start',data:{error:error?.message,errorStack:error?.stack},sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+    // #endregion
+    throw error;
+  }
   const authUrl = authResponse.url;
 
   if (authUrl) {
+    // #region agent log
+    debugLog({location:'linkedin.ts:125',message:'Creating LinkedIn interrupt',data:{authUrl},sessionId:'debug-session',runId:'run1',hypothesisId:'F'});
+    // #endregion
     const description = `# Authorization Required
   
 Please visit the following URL to authorize reading & posting to LinkedIn.
@@ -134,6 +155,9 @@ If you have already authorized reading/posting on Twitter, please accept this in
     };
 
     if (fields?.returnInterrupt) {
+      // #region agent log
+      debugLog({location:'linkedin.ts:155',message:'Returning LinkedIn interrupt',data:{interruptAction:authInterrupt.action_request.action,interruptArgs:authInterrupt.action_request.args},sessionId:'debug-session',runId:'run1',hypothesisId:'B,C'});
+      // #endregion
       return authInterrupt;
     }
 
@@ -151,6 +175,9 @@ If you have already authorized reading/posting on Twitter, please accept this in
       throw new Error("Authorization denied by user.");
     }
   }
+  // #region agent log
+  debugLog({location:'linkedin.ts:179',message:'No authUrl, returning undefined',data:{hasAuthResponse:!!authResponse},sessionId:'debug-session',runId:'run1',hypothesisId:'F'});
+  // #endregion
   return undefined;
 }
 
@@ -159,13 +186,19 @@ export async function getLinkedInAuthOrInterrupt(fields?: {
   returnInterrupt?: boolean;
   postToOrg?: boolean;
 }) {
+  // #region agent log
+  debugLog({location:'linkedin.ts:186',message:'getLinkedInAuthOrInterrupt entry',data:{hasLinkedInUserId:!!fields?.linkedInUserId,useArcade:useArcadeAuth(),hasArcadeKey:!!process.env.ARCADE_API_KEY,postToOrg:fields?.postToOrg},sessionId:'debug-session',runId:'run1',hypothesisId:'B,E'});
+  // #endregion
   const linkedInUserId = fields?.linkedInUserId || process.env.LINKEDIN_USER_ID;
   if (useArcadeAuth()) {
     if (!fields?.linkedInUserId) {
       throw new Error("Must provide LinkedIn User ID when using Arcade auth.");
     }
 
-    return getArcadeLinkedInAuthOrInterrupt(
+    // #region agent log
+    debugLog({location:'linkedin.ts:199',message:'Calling Arcade LinkedIn auth',data:{linkedInUserId:fields.linkedInUserId,postToOrg:fields?.postToOrg},sessionId:'debug-session',runId:'run1',hypothesisId:'B,E,F'});
+    // #endregion
+    const result = await getArcadeLinkedInAuthOrInterrupt(
       fields.linkedInUserId,
       new Arcade({ apiKey: process.env.ARCADE_API_KEY }),
       {
@@ -173,10 +206,21 @@ export async function getLinkedInAuthOrInterrupt(fields?: {
         postToOrg: fields?.postToOrg,
       },
     );
+    // #region agent log
+    debugLog({location:'linkedin.ts:206',message:'Arcade LinkedIn auth result',data:{hasResult:!!result,resultArgs:result?.action_request?.args,resultAction:result?.action_request?.action},sessionId:'debug-session',runId:'run1',hypothesisId:'B,F'});
+    // #endregion
+    return result;
   }
 
-  return getBasicLinkedInAuthOrInterrupt({
+  // #region agent log
+  debugLog({location:'linkedin.ts:216',message:'Calling basic LinkedIn auth',data:{linkedInUserId},sessionId:'debug-session',runId:'run1',hypothesisId:'B,E'});
+  // #endregion
+  const result = await getBasicLinkedInAuthOrInterrupt({
     linkedInUserId,
     returnInterrupt: fields?.returnInterrupt,
   });
+  // #region agent log
+  debugLog({location:'linkedin.ts:219',message:'Basic LinkedIn auth result',data:{hasResult:!!result,resultArgs:result?.action_request?.args},sessionId:'debug-session',runId:'run1',hypothesisId:'B'});
+  // #endregion
+  return result;
 }

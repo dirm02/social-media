@@ -24,6 +24,10 @@ import {
 } from "../generate-post/constants.js";
 import { SlackClient } from "../../clients/slack/client.js";
 import { ComplexPost } from "../shared/nodes/generate-post/types.js";
+import { appendFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+const DEBUG_LOG = join("c:", "Users", "HPProdesk", "Desktop", "NewSaaS", ".cursor", "debug.log");
+const debugLog = (data: any) => { try { mkdirSync(dirname(DEBUG_LOG), {recursive:true}); appendFileSync(DEBUG_LOG, JSON.stringify({...data,timestamp:Date.now()})+"\n"); console.log("[DEBUG]", data.message, data.data); } catch(e){console.error("[DEBUG ERROR]", e);} };
 
 async function getMediaFromImage(image?: {
   imageUrl: string;
@@ -142,16 +146,26 @@ export async function uploadPost(
   state: typeof UploadPostAnnotation.State,
   config: LangGraphRunnableConfig,
 ): Promise<Partial<typeof UploadPostAnnotation.State>> {
+  // #region agent log
+  debugLog({location:'upload-post.ts:145',message:'uploadPost entry',data:{hasPost:!!state.post,hasComplexPost:!!state.complexPost,hasImage:!!state.image,postLength:state.post?.length},sessionId:'debug-session',runId:'run1',hypothesisId:'K,L,N'});
+  // #endregion
   if (!state.post) {
     throw new Error("No post text found");
   }
   const isTextOnlyMode = isTextOnly(config);
   const postToLinkedInOrg = shouldPostToLinkedInOrg(config);
 
+  // #region agent log
+  debugLog({location:'upload-post.ts:155',message:'Upload config',data:{isTextOnly:isTextOnlyMode,postToLinkedInOrg,useArcade:useArcadeAuth(),useTwitterApiOnly:useTwitterApiOnly(),hasTwitterUserId:!!process.env.TWITTER_USER_ID},sessionId:'debug-session',runId:'run1',hypothesisId:'L,N'});
+  // #endregion
+
   try {
     let twitterClient: TwitterClient;
 
     if (useTwitterApiOnly() || !useArcadeAuth()) {
+      // #region agent log
+      debugLog({location:'upload-post.ts:165',message:'Using basic Twitter auth',data:{},sessionId:'debug-session',runId:'run1',hypothesisId:'N'});
+      // #endregion
       twitterClient = TwitterClient.fromBasicTwitterAuth();
     } else {
       const twitterUserId = process.env.TWITTER_USER_ID;
@@ -161,6 +175,10 @@ export async function uploadPost(
 
       const twitterToken = process.env.TWITTER_USER_TOKEN;
       const twitterTokenSecret = process.env.TWITTER_USER_TOKEN_SECRET;
+
+      // #region agent log
+      debugLog({location:'upload-post.ts:180',message:'Using Arcade Twitter auth',data:{twitterUserId,hasToken:!!twitterToken,hasTokenSecret:!!twitterTokenSecret},sessionId:'debug-session',runId:'run1',hypothesisId:'N,O'});
+      // #endregion
 
       twitterClient = await TwitterClient.fromArcade(
         twitterUserId,
@@ -172,12 +190,19 @@ export async function uploadPost(
           textOnlyMode: isTextOnlyMode,
         },
       );
+      // #region agent log
+      debugLog({location:'upload-post.ts:195',message:'Twitter client created from Arcade',data:{hasClient:!!twitterClient},sessionId:'debug-session',runId:'run1',hypothesisId:'O'});
+      // #endregion
     }
 
     let mediaBuffer: CreateMediaRequest | undefined = undefined;
     if (!isTextOnlyMode) {
       mediaBuffer = await getMediaFromImage(state.image);
     }
+
+    // #region agent log
+    debugLog({location:'upload-post.ts:205',message:'Before Twitter upload',data:{hasComplexPost:!!state.complexPost,hasMediaBuffer:!!mediaBuffer,postPreview:state.post.substring(0,100)},sessionId:'debug-session',runId:'run1',hypothesisId:'O,P'});
+    // #endregion
 
     if (state.complexPost) {
       await twitterClient.uploadThread([
@@ -196,8 +221,14 @@ export async function uploadPost(
       });
     }
 
+    // #region agent log
+    debugLog({location:'upload-post.ts:225',message:'Twitter upload SUCCESS',data:{},sessionId:'debug-session',runId:'run1',hypothesisId:'P'});
+    // #endregion
     console.log("✅ Successfully uploaded Tweet ✅");
   } catch (e: any) {
+    // #region agent log
+    debugLog({location:'upload-post.ts:230',message:'ERROR uploading to Twitter',data:{error:e instanceof Error ? e.message : String(e),stack:e instanceof Error ? e.stack : undefined},sessionId:'debug-session',runId:'run1',hypothesisId:'P'});
+    // #endregion
     console.error("Failed to upload post:", e);
     let errorString = "";
     if (typeof e === "object" && "message" in e) {

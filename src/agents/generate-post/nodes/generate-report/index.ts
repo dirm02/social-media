@@ -2,6 +2,19 @@ import { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { GeneratePostAnnotation } from "../../generate-post-state.js";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { GENERATE_REPORT_PROMPT } from "./prompts.js";
+// #region agent log
+import { join, dirname } from "path";
+import { appendFileSync, mkdirSync } from "fs";
+const DEBUG_LOG = join("c:", "Users", "HPProdesk", "Desktop", "NewSaaS", ".cursor", "debug.log");
+function debugLog(location: string, message: string, data: Record<string, unknown>) {
+  try {
+    mkdirSync(dirname(DEBUG_LOG), { recursive: true });
+    appendFileSync(DEBUG_LOG, JSON.stringify({ location, message, data, timestamp: Date.now(), sessionId: "debug-session", runId: "run1", hypothesisId: "R" }) + "\n");
+  } catch (e) {
+    console.log(`[${location}] ${message}`, data);
+  }
+}
+// #endregion
 
 /**
  * Parse the LLM generation to extract the report from inside the <report> tag.
@@ -41,6 +54,17 @@ export async function generateContentReport(
     temperature: 0,
   });
 
+  const userPrompt = formatReportPrompt(state.pageContents);
+
+  // #region agent log
+  debugLog("generate-report/index.ts:44", "Before report generation", {
+    pageContentsCount: state.pageContents?.length || 0,
+    totalPageContentLength: state.pageContents?.reduce((sum, c) => sum + c.length, 0) || 0,
+    userPromptLength: userPrompt.length,
+    systemPromptLength: GENERATE_REPORT_PROMPT.length,
+  });
+  // #endregion
+
   const result = await reportModel.invoke([
     {
       role: "system",
@@ -48,11 +72,21 @@ export async function generateContentReport(
     },
     {
       role: "user",
-      content: formatReportPrompt(state.pageContents),
+      content: userPrompt,
     },
   ]);
 
+  const parsedReport = parseGeneration(result.content as string);
+
+  // #region agent log
+  debugLog("generate-report/index.ts:66", "After report generation", {
+    rawResponseLength: (result.content as string)?.length || 0,
+    parsedReportLength: parsedReport.length,
+    parsedReportPreview: parsedReport.substring(0, 300),
+  });
+  // #endregion
+
   return {
-    report: parseGeneration(result.content as string),
+    report: parsedReport,
   };
 }

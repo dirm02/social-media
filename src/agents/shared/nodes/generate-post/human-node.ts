@@ -3,13 +3,16 @@ import { BaseGeneratePostState, BaseGeneratePostUpdate } from "./types.js";
 import { formatInTimeZone } from "date-fns-tz";
 import { isTextOnly, processImageInput } from "../../../utils.js";
 import {
-  getNextSaturdayDate,
   parseDateResponse,
 } from "../../../../utils/date.js";
 import { routeResponse } from "../../../shared/nodes/route-response.js";
 import { saveUsedUrls } from "../../../shared/stores/post-subject-urls.js";
 import { HumanInterrupt, HumanResponse } from "@langchain/langgraph/prebuilt";
 import { DateType } from "../../../types.js";
+import { appendFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+const DEBUG_LOG = join("c:", "Users", "HPProdesk", "Desktop", "NewSaaS", ".cursor", "debug.log");
+const debugLog = (data: any) => { try { mkdirSync(dirname(DEBUG_LOG), {recursive:true}); appendFileSync(DEBUG_LOG, JSON.stringify({...data,timestamp:Date.now()})+"\n"); console.log("[DEBUG]", data.message, data.data); } catch(e){console.error("[DEBUG ERROR]", e);} };
 
 interface ConstructDescriptionArgs {
   unknownResponseDescription: string;
@@ -112,25 +115,35 @@ export async function humanNode<
   State extends BaseGeneratePostState = BaseGeneratePostState,
   Update extends BaseGeneratePostUpdate = BaseGeneratePostUpdate,
 >(state: State, config: LangGraphRunnableConfig): Promise<Update> {
+  // #region agent log
+  debugLog({location:'human-node.ts:120',message:'humanNode entry',data:{hasPost:!!state.post,hasComplexPost:!!state.complexPost,hasReport:!!state.report,hasImage:!!state.image,postLength:state.post?.length},sessionId:'debug-session',runId:'run1',hypothesisId:'G,H'});
+  // #endregion
   if (!state.post) {
+    // #region agent log
+    debugLog({location:'human-node.ts:125',message:'ERROR: No post found',data:{state:JSON.stringify(state).substring(0,500)},sessionId:'debug-session',runId:'run1',hypothesisId:'G'});
+    // #endregion
     throw new Error("No post found");
   }
   const isTextOnlyMode = isTextOnly(config);
 
   const unknownResponseDescription = getUnknownResponseDescription(state);
-  const defaultDate = state.scheduleDate || getNextSaturdayDate();
+  // Changed: Post immediately by default instead of scheduling for next Saturday
+  const defaultDate = state.scheduleDate; // Removed || getNextSaturdayDate()
   let defaultDateString = "";
   if (
     typeof state.scheduleDate === "string" &&
     ["p1", "p2", "p3"].includes(state.scheduleDate)
   ) {
     defaultDateString = state.scheduleDate as string;
-  } else {
+  } else if (defaultDate) {
     defaultDateString = formatInTimeZone(
       defaultDate,
       "America/Los_Angeles",
       "MM/dd/yyyy hh:mm a z",
     );
+  } else {
+    // Empty string means post immediately
+    defaultDateString = "";
   }
 
   const postArgs = state.complexPost
@@ -142,15 +155,21 @@ export async function humanNode<
         post: state.post,
       };
 
+  const interruptArgs = {
+    ...postArgs,
+    date: defaultDateString,
+    // Do not provide an image field if the mode is text only
+    ...(!isTextOnlyMode && { image: state.image?.imageUrl ?? "" }),
+  };
+  
+  // #region agent log
+  debugLog({location:'human-node.ts:165',message:'Building humanNode interrupt',data:{interruptArgs:JSON.stringify(interruptArgs),argsKeys:Object.keys(interruptArgs),postArgsKeys:Object.keys(postArgs),hasDate:!!defaultDateString,isTextOnly:isTextOnlyMode},sessionId:'debug-session',runId:'run1',hypothesisId:'H,I'});
+  // #endregion
+
   const interruptValue: HumanInterrupt = {
     action_request: {
       action: "Schedule Twitter/LinkedIn post",
-      args: {
-        ...postArgs,
-        date: defaultDateString,
-        // Do not provide an image field if the mode is text only
-        ...(!isTextOnlyMode && { image: state.image?.imageUrl ?? "" }),
-      },
+      args: interruptArgs,
     },
     config: {
       allow_accept: true,
@@ -169,12 +188,20 @@ export async function humanNode<
     }),
   };
 
+  // #region agent log
+  debugLog({location:'human-node.ts:190',message:'Before humanNode interrupt() call',data:{hasDescription:!!interruptValue.description,descriptionLength:interruptValue.description?.length,argsKeys:Object.keys(interruptValue.action_request.args)},sessionId:'debug-session',runId:'run1',hypothesisId:'I,J'});
+  // #endregion
+
   // Save ALL links used to generate this post so that they are not used to generate future posts (duplicates).
   await saveUsedUrls([...(state.relevantLinks ?? []), ...state.links], config);
 
   const response = interrupt<HumanInterrupt[], HumanResponse[]>([
     interruptValue,
   ])[0];
+  
+  // #region agent log
+  debugLog({location:'human-node.ts:200',message:'After humanNode interrupt() call',data:{responseType:response?.type},sessionId:'debug-session',runId:'run1',hypothesisId:'J'});
+  // #endregion
 
   if (!["edit", "ignore", "accept", "response"].includes(response.type)) {
     throw new Error(

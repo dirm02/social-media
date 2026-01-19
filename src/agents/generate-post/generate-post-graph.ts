@@ -66,7 +66,9 @@ async function condenseOrHumanConditionalEdge(
   "condensePost" | "humanNode" | "findAndGenerateImagesSubGraph" | typeof END
 > {
   const cleanedPost = removeUrls(state.post || "");
-  if (cleanedPost.length > 280 && state.condenseCount <= 3) {
+  // Only condense if post is VERY long (over 2000 chars) - we want detailed posts in 400-550 range
+  // Posts between 550-2000 are fine and should go to human approval
+  if (cleanedPost.length > 2000 && state.condenseCount <= 3) {
     return "condensePost";
   }
 

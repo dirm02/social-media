@@ -3,12 +3,23 @@ import { GeneratePostAnnotation } from "../../generate-post-state.js";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { GENERATE_POST_PROMPT } from "./prompts.js";
 import { formatPrompt, parseGeneration } from "./utils.js";
-import { ALLOWED_TIMES } from "../../constants.js";
 import {
   getReflectionsPrompt,
   REFLECTIONS_PROMPT,
 } from "../../../../utils/reflections.js";
-import { getNextSaturdayDate } from "../../../../utils/date.js";
+// #region agent log
+import { join, dirname } from "path";
+import { appendFileSync, mkdirSync } from "fs";
+const DEBUG_LOG = join("c:", "Users", "HPProdesk", "Desktop", "NewSaaS", ".cursor", "debug.log");
+function debugLog(location: string, message: string, data: Record<string, unknown>) {
+  try {
+    mkdirSync(dirname(DEBUG_LOG), { recursive: true });
+    appendFileSync(DEBUG_LOG, JSON.stringify({ location, message, data, timestamp: Date.now(), sessionId: "debug-session", runId: "run1", hypothesisId: "Q" }) + "\n");
+  } catch (e) {
+    console.log(`[${location}] ${message}`, data);
+  }
+}
+// #endregion
 
 export async function generatePost(
   state: typeof GeneratePostAnnotation.State,
@@ -38,6 +49,15 @@ export async function generatePost(
     reflectionsPrompt,
   );
 
+  // #region agent log
+  debugLog("generate-post/index.ts:39", "Before LLM call", {
+    reportLength: state.report?.length || 0,
+    userPromptLength: prompt.length,
+    systemPromptLength: generatePostPrompt.length,
+    reportPreview: state.report?.substring(0, 200) || "",
+  });
+  // #endregion
+
   const postResponse = await postModel.invoke([
     {
       role: "system",
@@ -49,16 +69,27 @@ export async function generatePost(
     },
   ]);
 
-  // Randomly select a time from the allowed times
-  const [postHour, postMinute] = ALLOWED_TIMES[
-    Math.floor(Math.random() * ALLOWED_TIMES.length)
-  ]
-    .split(" ")[0]
-    .split(":");
-  const postDate = getNextSaturdayDate(Number(postHour), Number(postMinute));
+  const parsedPost = parseGeneration(postResponse.content as string);
+
+  // #region agent log
+  debugLog("generate-post/index.ts:59", "After LLM call", {
+    rawResponseLength: (postResponse.content as string)?.length || 0,
+    parsedPostLength: parsedPost.length,
+    parsedPostPreview: parsedPost.substring(0, 200),
+  });
+  // #endregion
+
+  // Removed automatic scheduling - posts will be immediate by default
+  // Users can set a schedule date via Agent Inbox if desired
+  // const [postHour, postMinute] = ALLOWED_TIMES[
+  //   Math.floor(Math.random() * ALLOWED_TIMES.length)
+  // ]
+  //   .split(" ")[0]
+  //   .split(":");
+  // const postDate = getNextSaturdayDate(Number(postHour), Number(postMinute));
 
   return {
-    post: parseGeneration(postResponse.content as string),
-    scheduleDate: postDate,
+    post: parsedPost,
+    // scheduleDate: postDate, // Removed - now posts immediately
   };
 }

@@ -15,6 +15,10 @@ import {
   POST_TO_LINKEDIN_ORGANIZATION,
   TEXT_ONLY_MODE,
 } from "../../../generate-post/constants.js";
+import { appendFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+const DEBUG_LOG = join("c:", "Users", "HPProdesk", "Desktop", "NewSaaS", ".cursor", "debug.log");
+const debugLog = (data: any) => { try { mkdirSync(dirname(DEBUG_LOG), {recursive:true}); appendFileSync(DEBUG_LOG, JSON.stringify({...data,timestamp:Date.now()})+"\n"); console.log("[DEBUG]", data.message, data.data); } catch(e){console.error("[DEBUG ERROR]", e);} };
 
 interface SendSlackMessageArgs {
   isTextOnlyMode: boolean;
@@ -82,6 +86,9 @@ export async function schedulePost<
   State extends BaseGeneratePostState = BaseGeneratePostState,
   Update extends BaseGeneratePostUpdate = BaseGeneratePostUpdate,
 >(state: State, config: LangGraphRunnableConfig): Promise<Update> {
+  // #region agent log
+  debugLog({location:'schedule-post.ts:85',message:'schedulePost entry',data:{hasPost:!!state.post,hasComplexPost:!!state.complexPost,hasImage:!!state.image,postLength:state.post?.length},sessionId:'debug-session',runId:'run1',hypothesisId:'K,L'});
+  // #endregion
   if (!state.post) {
     throw new Error("No post to schedule found");
   }
@@ -101,11 +108,18 @@ export async function schedulePost<
     });
   }
 
+  // #region agent log
+  debugLog({location:'schedule-post.ts:105',message:'Before upload_post creation',data:{afterSeconds,isTextOnly:isTextOnlyMode,postToLinkedInOrg,hasApiUrl:!!process.env.LANGGRAPH_API_URL,hasApiKey:!!process.env.LANGCHAIN_API_KEY},sessionId:'debug-session',runId:'run1',hypothesisId:'K,L,M'});
+  // #endregion
+
   let runId: string | undefined;
   let threadId: string | undefined;
   try {
     const thread = await client.threads.create();
     threadId = thread.thread_id;
+    // #region agent log
+    debugLog({location:'schedule-post.ts:115',message:'Created upload_post thread',data:{threadId},sessionId:'debug-session',runId:'run1',hypothesisId:'L'});
+    // #endregion
     const run = await client.runs.create(thread.thread_id, "upload_post", {
       input: {
         post: state.post,
@@ -121,7 +135,13 @@ export async function schedulePost<
       ...(afterSeconds ? { afterSeconds } : {}),
     });
     runId = run.run_id;
+    // #region agent log
+    debugLog({location:'schedule-post.ts:130',message:'Created upload_post run',data:{runId,threadId,afterSeconds},sessionId:'debug-session',runId:'run1',hypothesisId:'L,M'});
+    // #endregion
   } catch (e) {
+    // #region agent log
+    debugLog({location:'schedule-post.ts:135',message:'ERROR creating upload_post',data:{error:e instanceof Error ? e.message : String(e),stack:e instanceof Error ? e.stack : undefined},sessionId:'debug-session',runId:'run1',hypothesisId:'M'});
+    // #endregion
     console.error("Failed to create upload_post run", e);
     throw e;
   }

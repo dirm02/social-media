@@ -25,6 +25,10 @@ async function invokeGraph() {
     apiUrl: process.env.LANGGRAPH_API_URL || "http://localhost:54367",
   });
 
+  // Agent Inbox URL - use local if running locally, otherwise use deployed version
+  const agentInboxUrl =
+    process.env.AGENT_INBOX_URL || "http://localhost:3000";
+
   console.log(`🚀 Starting to process ${testUrls.length} URLs...\n`);
 
   for (let i = 0; i < testUrls.length; i++) {
@@ -46,7 +50,7 @@ async function invokeGraph() {
             // [LINKEDIN_USER_ID]: process.env.LINKEDIN_USER_ID,
             // This ensures the graph runs in a basic text only mode.
             // If you followed the full setup instructions, you may remove this line.
-            [TEXT_ONLY_MODE]: false,
+            [TEXT_ONLY_MODE]: true,
             // These will skip content relevancy checks and used URLs checks
             [SKIP_CONTENT_RELEVANCY_CHECK]: true,
             [SKIP_USED_URLS_CHECK]: true,
@@ -55,7 +59,7 @@ async function invokeGraph() {
       });
 
       console.log(`✅ [${urlNumber}/${testUrls.length}] Successfully created thread: ${thread_id}`);
-      console.log(`   View in Agent Inbox: https://dev.agentinbox.ai/?thread=${thread_id}\n`);
+      console.log(`   View in Agent Inbox: ${agentInboxUrl}/?thread=${thread_id}\n`);
 
       // Add delay between requests to prevent rate limiting (except for the last URL)
       if (i < testUrls.length - 1) {
